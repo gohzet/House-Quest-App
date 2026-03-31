@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "Family": {
+      "title": "Family",
+      "description": "A family group in HouseQuest.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the family." },
+        "code": { "type": "string", "description": "The unique invite code for the family." },
+        "isLocked": { "type": "boolean", "description": "Whether the family is hidden from public discovery." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the family was created." }
+      },
+      "required": ["name", "code"]
+    },
+    "JoinRequest": {
+      "title": "Join Request",
+      "description": "A request from a user to join a family.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "avatar": { "type": "string" },
+        "role": { "type": "string", "enum": ["parent", "child"] },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "DECLINED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "avatar", "role", "status"]
+    },
+    "FamilyMember": {
+      "title": "Family Member",
+      "description": "A member of a family (parent or child).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The member's name." },
+        "points": { "type": "number", "description": "Current star/point balance." },
+        "avatar": { "type": "string", "description": "URL to the member's avatar." },
+        "role": { "type": "string", "enum": ["parent", "child"], "description": "The member's role." },
+        "uid": { "type": "string", "description": "The Firebase Auth UID associated with this member." }
+      },
+      "required": ["name", "points", "avatar", "role"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A household chore or quest.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "points": { "type": "number" },
+        "status": { "type": "string", "enum": ["TO DO", "PENDING", "APPROVED", "REJECTED", "DONE"] },
+        "assignedToId": { "type": "string" },
+        "assignedToName": { "type": "string" },
+        "category": { "type": "string" },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "proofImage": { "type": "string" },
+        "aiRating": { "type": "number" },
+        "aiFeedback": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "points", "status", "assignedToId", "assignedToName", "category"]
+    },
+    "Reward": {
+      "title": "Reward",
+      "description": "A reward that can be redeemed for points.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "cost": { "type": "number" },
+        "image": { "type": "string" }
+      },
+      "required": ["title", "cost", "image"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Private user data for mapping to families.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string", "description": "The ID of the family this user belongs to." },
+        "role": { "type": "string", "enum": ["parent", "child"] },
+        "email": { "type": "string" }
+      },
+      "required": ["familyId", "role"]
+    }
+  },
+  "firestore": {
+    "/families/{familyId}": {
+      "schema": "Family",
+      "description": "Family metadata."
+    },
+    "/families/{familyId}/members/{memberId}": {
+      "schema": "FamilyMember",
+      "description": "Members of the family."
+    },
+    "/families/{familyId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Tasks for the family."
+    },
+    "/families/{familyId}/rewards/{rewardId}": {
+      "schema": "Reward",
+      "description": "Available rewards for the family."
+    },
+    "/families/{familyId}/joinRequests/{requestId}": {
+      "schema": "JoinRequest",
+      "description": "Requests to join the family."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Private user profile mapping."
+    },
+    "/inviteCodes/{code}": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "familyId": { "type": "string" }
+        }
+      },
+      "description": "Lookup table for invite codes."
+    }
+  }
+}

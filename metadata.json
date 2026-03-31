@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Family House Quests",
+  "description": "A gamified household chore system where both parents and children can be heroes, complete quests, and earn rewards.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

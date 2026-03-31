@@ -1,0 +1,180 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: /users/{userId}
+    // Fields:
+    //   - familyId: string (required)
+    //   - role: string (required, 'parent' | 'child')
+    //   - email: string (optional)
+    //
+    // Collection: /families/{familyId}
+    // Fields:
+    //   - name: string (required)
+    //   - code: string (required)
+    //   - isLocked: boolean (optional, default false)
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: /families/{familyId}/joinRequests/{requestId}
+    // Fields:
+    //   - uid: string (required)
+    //   - name: string (required)
+    //   - avatar: string (required)
+    //   - role: string (required, 'parent' | 'child')
+    //   - status: string (required, 'PENDING' | 'ACCEPTED' | 'DECLINED')
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: /families/{familyId}/members/{memberId}
+    // Fields:
+    //   - name: string (required)
+    //   - points: number (required)
+    //   - avatar: string (required)
+    //   - role: string (required, 'parent' | 'child')
+    //   - uid: string (optional)
+    //
+    // Collection: /families/{familyId}/tasks/{taskId}
+    // Fields:
+    //   - title: string (required)
+    //   - points: number (required)
+    //   - status: string (required, 'TO DO' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'DONE')
+    //   - assignedToId: string (required)
+    //   - assignedToName: string (required)
+    //   - category: string (required)
+    //   - createdAt: timestamp (optional)
+    //
+    // Collection: /inviteCodes/{code}
+    // Fields:
+    //   - familyId: string (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isInFamily(familyId) {
+      return isAuthenticated() && userExists() && getUserData().familyId == familyId;
+    }
+
+    function isParent(familyId) {
+      return isInFamily(familyId) && getUserData().role == 'parent';
+    }
+
+    function isDefaultAdmin() {
+      return isAuthenticated() && 
+             request.auth.token != null &&
+             request.auth.token.get('email', '') == "colfyr@gmail.com" && 
+             request.auth.token.get('email_verified', false) == true;
+    }
+
+    // ===============================================================
+    // Validation Functions
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['familyId', 'role']) &&
+             data.familyId is string &&
+             data.role in ['parent', 'child'];
+    }
+
+    function isValidFamily(data) {
+      return data.keys().hasAll(['name', 'code']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.code is string && data.code.size() == 6 &&
+             (!('isLocked' in data) || data.isLocked is bool);
+    }
+
+    function isValidJoinRequest(data) {
+      return data.keys().hasAll(['uid', 'name', 'avatar', 'role', 'status']) &&
+             data.uid is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.avatar is string &&
+             data.role in ['parent', 'child'] &&
+             data.status in ['PENDING', 'ACCEPTED', 'DECLINED'];
+    }
+
+    function isValidMember(data) {
+      return data.keys().hasAll(['name', 'points', 'avatar', 'role']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 50 &&
+             data.points is number &&
+             data.avatar is string &&
+             data.role in ['parent', 'child'];
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll(['title', 'points', 'status', 'assignedToId', 'assignedToName', 'category']) &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.points is number && data.points >= 0 &&
+             data.status in ['TO DO', 'PENDING', 'APPROVED', 'REJECTED', 'DONE'] &&
+             data.assignedToId is string &&
+             data.assignedToName is string &&
+             data.category is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isUser(userId) || isDefaultAdmin();
+      allow create: if isUser(userId) && isValidUser(request.resource.data);
+      allow update: if isUser(userId) && isValidUser(request.resource.data);
+    }
+
+    match /families/{familyId} {
+      allow read: if isInFamily(familyId) || isDefaultAdmin() || (isAuthenticated() && resource.data.get('isLocked', false) == false);
+      allow create: if isAuthenticated() && isValidFamily(request.resource.data);
+      allow update: if isParent(familyId) && isValidFamily(request.resource.data);
+
+      match /joinRequests/{requestId} {
+        allow read: if isParent(familyId) || (isAuthenticated() && request.auth.uid == resource.data.uid);
+        allow create: if isAuthenticated() && isValidJoinRequest(request.resource.data) && request.resource.data.uid == request.auth.uid;
+        allow update: if isParent(familyId) && isValidJoinRequest(request.resource.data);
+        allow delete: if isParent(familyId) || (isAuthenticated() && request.auth.uid == resource.data.uid);
+      }
+
+      match /members/{memberId} {
+        allow read: if isInFamily(familyId) || isDefaultAdmin();
+        allow create: if (isParent(familyId) || isUser(memberId)) && isValidMember(request.resource.data);
+        allow update: if (isUser(memberId) || isParent(familyId)) && isValidMember(request.resource.data);
+        allow delete: if isParent(familyId) && memberId != request.auth.uid;
+      }
+
+      match /tasks/{taskId} {
+        allow read: if isInFamily(familyId) || isDefaultAdmin();
+        allow create: if isParent(familyId) && isValidTask(request.resource.data);
+        allow update: if (isInFamily(familyId) && isValidTask(request.resource.data)) || isParent(familyId);
+      }
+
+      match /rewards/{rewardId} {
+        allow read: if isInFamily(familyId) || isDefaultAdmin();
+        allow write: if isParent(familyId);
+      }
+    }
+
+    match /inviteCodes/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+    }
+  }
+}
